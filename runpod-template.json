@@ -1,0 +1,21 @@
+{
+  "name": "Modular TTS System",
+  "description": "Scalable TTS system with multiple models",
+  "dockerImage": "your-registry/tts-gateway:latest",
+  "containerDiskInGb": 20,
+  "volumeInGb": 10,
+  "env": [
+    {
+      "key": "MODEL_TYPE",
+      "value": "gateway"
+    }
+  ],
+  "ports": [
+    {
+      "ip": "0.0.0.0",
+      "publicPort": 8000,
+      "privatePort": 8000,
+      "type": "http"
+    }
+  ]
+}
