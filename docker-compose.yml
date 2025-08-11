@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  gateway:
+    build: ./gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - KOKKORO_ENDPOINT=http://kokkoro:8001
+      - CHATTERBOX_ENDPOINT=http://chatterbox:8002
+    depends_on:
+      - kokkoro
+      - chatterbox
+    networks:
+      - tts-network
+
+  kokkoro:
+    build: ./models/kokkoro
+    ports:
+      - "8001:8001"
+    networks:
+      - tts-network
+
+  chatterbox:
+    build: ./models/chatterbox
+    ports:
+      - "8002:8002"
+    networks:
+      - tts-network
+
+networks:
+  tts-network:
+    driver: bridge
