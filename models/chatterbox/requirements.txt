@@ -4,3 +4,4 @@ pyttsx3==2.90
 gtts==2.4.0
 pydantic==2.5.0
 aiofiles==23.2.1
+runpod>=1.5.1
