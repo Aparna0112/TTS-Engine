@@ -12,7 +12,6 @@ class TTSRequest(BaseModel):
     text: str
     voice: str = "default"
     speed: float = 1.0
-    pitch: float = 1.0
 
 @app.get("/")
 async def root():
@@ -32,6 +31,8 @@ async def synthesize(request: TTSRequest):
         )
         return {
             "audio_url": result["audio_url"],
+            "audio_base64": result.get("audio_base64"),
+            "audio_data_url": result.get("audio_data_url"),
             "model_used": "chatterbox",
             "duration": result.get("duration"),
             "status": "success"
@@ -47,11 +48,10 @@ def handler(event):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
-        request = TTSRequest(**input_data)
         result = loop.run_until_complete(handler_instance.generate_audio(
-            text=request.text,
-            voice=request.voice,
-            speed=request.speed
+            text=input_data.get('text', 'Hello World'),
+            voice=input_data.get('voice', 'default'),
+            speed=input_data.get('speed', 1.0)
         ))
         
         return {"output": result}
@@ -62,6 +62,8 @@ def handler(event):
 if __name__ == "__main__":
     if os.getenv('RUNPOD_ENDPOINT_ID'):
         import runpod
+        print("Starting Chatterbox TTS on RunPod...")
         runpod.serverless.start({"handler": handler})
     else:
+        print("Starting Chatterbox TTS locally...")
         uvicorn.run(app, host="0.0.0.0", port=8002)
