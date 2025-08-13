@@ -1,17 +1,17 @@
 import os
 
 def handler(event):
-    """Minimal working handler"""
+    """Ultra-minimal gateway that just echoes back"""
     return {
         "output": {
-            "message": "Gateway is alive!",
-            "input_received": event.get("input", {}),
-            "status": "working"
+            "message": "Ultra-minimal gateway working!",
+            "echo": event
         }
     }
 
 if __name__ == "__main__":
     if os.getenv('RUNPOD_ENDPOINT_ID'):
         import runpod
-        print("Starting minimal gateway...")
         runpod.serverless.start({"handler": handler})
+    else:
+        print("Local mode")
