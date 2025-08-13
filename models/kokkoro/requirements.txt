@@ -1,11 +1,4 @@
+runpod>=1.6.2
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-torch==2.1.0
-torchaudio==2.1.0
-transformers==4.35.2
-numpy==1.24.3
-scipy==1.11.4
-soundfile==0.12.1
 pydantic==2.5.0
-aiofiles==23.2.1
-runpod>=1.5.1
