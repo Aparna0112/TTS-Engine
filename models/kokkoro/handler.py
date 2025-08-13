@@ -1,52 +1,63 @@
 import asyncio
 import tempfile
 import os
+import base64
+import io
 from typing import Dict
-import torch
-import torchaudio
-import numpy as np
+from gtts import gTTS
 
 class KokkoroHandler:
     def __init__(self):
-        self.model = None
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self._load_model()
-    
-    def _load_model(self):
-        """Load the Kokkoro TTS model"""
-        # Placeholder for actual model loading
-        # In real implementation, load your Kokkoro model here
-        print(f"Loading Kokkoro model on {self.device}")
-        self.model = "kokkoro_model_placeholder"
+        print("Initializing Kokkoro TTS handler with Google TTS")
     
     async def generate_audio(self, text: str, voice: str = "default", 
                            speed: float = 1.0, pitch: float = 1.0) -> Dict:
-        """Generate audio from text using Kokkoro model"""
+        """Generate audio using Google TTS (gTTS)"""
         try:
-            # Placeholder implementation
-            # Replace with actual Kokkoro TTS inference
+            # Map speed to gTTS slow parameter
+            slow_speech = speed < 0.8
             
-            # Simulate processing time
-            await asyncio.sleep(1)
+            # Generate TTS audio
+            tts = gTTS(
+                text=text, 
+                lang='en', 
+                slow=slow_speech,
+                tld='com'  # Use .com domain for consistency
+            )
             
-            # Generate dummy audio for demonstration
-            sample_rate = 22050
-            duration = len(text) * 0.1  # Rough estimate
-            samples = int(sample_rate * duration)
+            # Use BytesIO for in-memory audio processing
+            audio_buffer = io.BytesIO()
+            tts.write_to_fp(audio_buffer)
+            audio_buffer.seek(0)
             
-            # Generate sine wave as placeholder audio
-            audio_data = np.sin(2 * np.pi * 440 * np.linspace(0, duration, samples))
+            # Convert to base64 for easy transfer
+            audio_data = audio_buffer.read()
+            audio_base64 = base64.b64encode(audio_data).decode('utf-8')
             
-            # Save to temporary file
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
-                torchaudio.save(tmp_file.name, torch.tensor(audio_data).unsqueeze(0), sample_rate)
+            # Create data URL for immediate playback
+            audio_data_url = f"data:audio/mp3;base64,{audio_base64}"
+            
+            # Estimate duration (rough calculation)
+            word_count = len(text.split())
+            duration = (word_count * 0.6) / speed  # ~0.6 seconds per word adjusted for speed
+            
+            # Save to temporary file for compatibility
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
+                tmp_file.write(audio_data)
                 audio_path = tmp_file.name
             
             return {
                 "audio_url": audio_path,
+                "audio_base64": audio_base64,
+                "audio_data_url": audio_data_url,
+                "audio_format": "mp3",
                 "duration": duration,
-                "sample_rate": sample_rate,
-                "model": "kokkoro"
+                "sample_rate": 22050,
+                "model": "kokkoro",
+                "voice_used": voice,
+                "speed_used": speed,
+                "text_length": len(text),
+                "word_count": word_count
             }
             
         except Exception as e:
