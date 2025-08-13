@@ -1,21 +1,26 @@
-# TTS-Engine
-Separate containers for each TTS
-# Modular TTS System
+# 🎵 Modular TTS System
 
-A scalable Text-to-Speech system supporting multiple models with RunPod deployment.
+A scalable, microservices-based Text-to-Speech system with multiple TTS engines, deployed on RunPod serverless infrastructure.
 
-## Features
+## 🏗️ Architecture
 
-- **Modular Architecture**: Each TTS model runs in separate containers
-- **Centralized Gateway**: Single API endpoint routing to appropriate models  
-- **RunPod Ready**: Built for serverless deployment on RunPod
-- **Easily Extensible**: Add new models by following the template
-- **Health Monitoring**: Built-in health checks and monitoring
+- **Gateway Service**: Central API router and load balancer
+- **Kokkoro TTS**: High-quality TTS using Google TTS
+- **Chatterbox TTS**: Fast and efficient TTS alternative
+- **Web Client**: HTML5 audio player for testing
+- **CI/CD Pipeline**: Automated building and deployment
 
-## Quick Start
+## 🚀 Quick Start
 
-### Local Development
-```bash
-git clone <your-repo>
-cd tts-system
-docker-compose up --build
+### 1. Deploy to RunPod
+
+1. **Fork this repository**
+2. **GitHub Actions will automatically build containers**
+3. **Create 3 RunPod endpoints:**
+   - Gateway: `ghcr.io/your-username/repo-name/tts-gateway:latest`
+   - Kokkoro: `ghcr.io/your-username/repo-name/tts-kokkoro:latest`
+   - Chatterbox: `ghcr.io/your-username/repo-name/tts-chatterbox:latest`
+
+### 2. Configure Gateway
+
+Set environment variables in Gateway endpoint:
