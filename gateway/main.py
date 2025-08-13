@@ -1,10 +1,9 @@
-import asyncio
-import json
 import os
-from typing import Dict, Any, Optional
-from fastapi import FastAPI, HTTPException, UploadFile, File
-from pydantic import BaseModel
+import asyncio
 import httpx
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import Dict, Optional
 import uvicorn
 from config import Config
 from models_registry import ModelsRegistry
@@ -22,61 +21,116 @@ class TTSRequest(BaseModel):
 
 class TTSResponse(BaseModel):
     audio_url: str
+    audio_base64: Optional[str] = None
+    audio_data_url: Optional[str] = None
     model_used: str
     duration: Optional[float] = None
     status: str = "success"
 
 @app.get("/")
 async def root():
-    return {"message": "TTS Gateway Running", "available_models": registry.get_available_models()}
+    return {
+        "message": "TTS Gateway Running", 
+        "available_models": registry.get_available_models(),
+        "version": "1.0.0"
+    }
 
 @app.get("/models")
 async def get_models():
     return {"models": registry.get_available_models()}
-
-@app.post("/synthesize", response_model=TTSResponse)
-async def synthesize_text(request: TTSRequest):
-    if request.model not in registry.get_available_models():
-        raise HTTPException(status_code=400, f"Model {request.model} not available")
-    
-    model_endpoint = registry.get_model_endpoint(request.model)
-    
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        try:
-            response = await client.post(
-                f"{model_endpoint}/synthesize",
-                json=request.dict()
-            )
-            response.raise_for_status()
-            result = response.json()
-            return TTSResponse(**result)
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=503, f"Model service unavailable: {str(e)}")
 
 @app.get("/health")
 async def health_check():
     model_status = {}
     for model_name in registry.get_available_models():
         endpoint = registry.get_model_endpoint(model_name)
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(f"{endpoint}/health")
-                model_status[model_name] = "healthy" if response.status_code == 200 else "unhealthy"
-        except:
-            model_status[model_name] = "unreachable"
+        if endpoint:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    response = await client.post(
+                        endpoint,
+                        json={"input": {"text": "health check"}},
+                        headers={"Authorization": f"Bearer {os.getenv('RUNPOD_API_KEY', 'test')}"}
+                    )
+                    model_status[model_name] = "healthy" if response.status_code == 200 else "unhealthy"
+            except:
+                model_status[model_name] = "unreachable"
+        else:
+            model_status[model_name] = "not_configured"
     
     return {"gateway": "healthy", "models": model_status}
+
+@app.post("/synthesize", response_model=TTSResponse)
+async def synthesize_text(request: TTSRequest):
+    if request.model not in registry.get_available_models():
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Model '{request.model}' not available. Available models: {registry.get_available_models()}"
+        )
+    
+    model_endpoint = registry.get_model_endpoint(request.model)
+    if not model_endpoint:
+        raise HTTPException(
+            status_code=503, 
+            detail=f"Model '{request.model}' endpoint not configured"
+        )
+    
+    # Prepare request for model endpoint
+    model_request = {
+        "input": {
+            "text": request.text,
+            "voice": request.voice,
+            "speed": request.speed,
+            "pitch": request.pitch
+        }
+    }
+    
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            headers = {}
+            if os.getenv('RUNPOD_API_KEY'):
+                headers["Authorization"] = f"Bearer {os.getenv('RUNPOD_API_KEY')}"
+            
+            response = await client.post(
+                model_endpoint,
+                json=model_request,
+                headers=headers
+            )
+            response.raise_for_status()
+            result = response.json()
+            
+            if "output" in result:
+                output = result["output"]
+                return TTSResponse(
+                    audio_url=output.get("audio_url", ""),
+                    audio_base64=output.get("audio_base64"),
+                    audio_data_url=output.get("audio_data_url"),
+                    model_used=output.get("model_used", request.model),
+                    duration=output.get("duration"),
+                    status=output.get("status", "success")
+                )
+            else:
+                raise HTTPException(status_code=500, detail="Invalid response from model service")
+                
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=503, detail=f"Model service unavailable: {str(e)}")
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=e.response.status_code, detail=f"Model service error: {e.response.text}")
 
 # RunPod handler function
 def handler(event):
     """RunPod serverless handler"""
     try:
-        # Extract request data
         input_data = event.get('input', {})
         
-        # Handle different request types
+        if input_data.get('action') == 'get_models':
+            return {"output": {"models": registry.get_available_models()}}
+        
+        if input_data.get('action') == 'health_check':
+            return {"output": {"status": "healthy", "models": registry.get_available_models()}}
+        
+        # Handle TTS synthesis request
         if 'text' in input_data and 'model' in input_data:
-            # TTS synthesis request
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
@@ -85,20 +139,16 @@ def handler(event):
             
             return {"output": result.dict()}
         
-        elif input_data.get('action') == 'get_models':
-            return {"output": {"models": registry.get_available_models()}}
+        return {"error": "Invalid request format. Required: text and model"}
         
-        else:
-            return {"error": "Invalid request format"}
-            
     except Exception as e:
         return {"error": str(e)}
 
 if __name__ == "__main__":
-    # Check if running in RunPod environment
     if os.getenv('RUNPOD_ENDPOINT_ID'):
         import runpod
+        print("Starting TTS Gateway on RunPod...")
         runpod.serverless.start({"handler": handler})
     else:
-        # Local development
+        print("Starting TTS Gateway locally...")
         uvicorn.run(app, host="0.0.0.0", port=8000)
