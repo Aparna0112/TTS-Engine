@@ -3,7 +3,7 @@ import os
 def handler(event):
     return {
         "output": {
-            "message": "Minimal gateway working!",
+            "message": "Gateway working!",
             "received": event.get("input", {})
         }
     }
