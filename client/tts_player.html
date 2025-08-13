@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modular TTS System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 800px;
+            width: 100%;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        
+        .input-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        textarea, select, input[type="range"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        textarea {
+            height: 120px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        
+        textarea:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .speed-control input {
+            flex: 1;
+        }
+        
+        .speed-value {
+            background: #f8f9fa;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            color: #667eea;
+            min-width: 60px;
+            text-align: center;
+        }
+        
+        .buttons {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 25px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            flex: 1;
+            min-width: 150px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            color: #667eea;
+            font-weight: 600;
+            margin: 20px 0;
+            font-size: 18px;
+        }
+        
+        .audio-player {
+            display: none;
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 15px;
+            margin: 25px 0;
+            border-left: 5px solid #667eea;
+        }
+        
+        #audioElement {
+            width: 100%;
+            margin-top: 15px;
+        }
+        
+        .audio-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .info-item {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .info-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+        
+        .info-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            text-align: center;
+            font-weight: 600;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .config-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .config-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .endpoint-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Modular TTS System</h1>
+        
+        <!-- Configuration Section -->
+        <div class="config-section">
+            <div class="config-title">⚙️ Configuration</div>
+            <div class="input-group">
+                <label for="gatewayEndpoint">Gateway Endpoint URL:</label>
+                <input type="text" id="gatewayEndpoint" class="endpoint-input" 
+                       placeholder="https://api.runpod.ai/v2/YOUR_GATEWAY_ID/runsync">
+            </div>
+            <div class="input-group">
+                <label for="apiKey">RunPod API Key:</label>
+                <input type="password" id="apiKey" class="endpoint-input" 
+                       placeholder="Your RunPod API Key">
+            </div>
+        </div>
+        
+        <!-- TTS Input Section -->
+        <div class="input-group">
+            <label for="textInput">📝 Text to Synthesize:</label>
+            <textarea id="textInput" placeholder="Enter the text you want to convert to speech...">Hello! Welcome to our modular text-to-speech system. This system can route your request to different TTS models for the best quality output.</textarea>
+        </div>
+        
+        <div class="input-group">
+            <label for="modelSelect">🤖 TTS Model:</label>
+            <select id="modelSelect">
+                <option value="kokkoro">Kokkoro (Google TTS - High Quality)</option>
+                <option value="chatterbox">Chatterbox (Fast & Efficient)</option>
+            </select>
+        </div>
+        
+        <div class="input-group">
+            <label for="voiceSelect">🎭 Voice Style:</label>
+            <select id="voiceSelect">
+                <option value="default">Default</option>
+                <option value="casual">Casual</option>
+                <option value="formal">Formal</option>
+            </select>
+        </div>
+        
+        <div class="input-group">
+            <label for="speedSlider">⚡ Speaking Speed:</label>
+            <div class="speed-control">
+                <input type="range" id="speedSlider" min="0.5" max="2.0" step="0.1" value="1.0">
+                <div class="speed-value" id="speedValue">1.0x</div>
+            </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="buttons">
+            <button onclick="generateAudio()" id="generateBtn">
+                🎵 Generate Audio
+            </button>
+            <button onclick="testGateway()" id="testBtn" class="secondary">
+                🔍 Test Gateway
+            </button>
+            <button onclick="downloadAudio()" id="downloadBtn" class="success" disabled>
+                💾 Download Audio
+            </button>
+        </div>
+        
+        <!-- Loading Indicator -->
+        <div class="loading" id="loading">
+            🎵 Generating audio... Please wait...
+        </div>
+        
+        <!-- Audio Player -->
+        <div class="audio-player" id="audioPlayer">
+            <h3>🎧 Generated Audio</h3>
+            <audio id="audioElement" controls></audio>
+            <div class="audio-info" id="audioInfo"></div>
+        </div>
+        
+        <!-- Status Messages -->
+        <div id="statusMessages"></div>
+    </div>
+
+    <script>
+        let currentAudioData = null;
+
+        // Update speed display
+        document.getElementById('speedSlider').oninput = function() {
+            document.getElementById('speedValue').textContent = this.value + 'x';
+        };
+
+        async function testGateway() {
+            const gatewayUrl = document.getElementById('gatewayEndpoint').value;
+            const apiKey = document.getElementById('apiKey').value;
+            
+            if (!gatewayUrl) {
+                showStatus('Please enter Gateway Endpoint URL', 'error');
+                return;
+            }
+            
+            showLoading(true);
+            
+            try {
+                const response = await fetch(gatewayUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': apiKey ? `Bearer ${apiKey}` : '',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        input: {
+                            action: 'health_check'
+                        }
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus('✅ Gateway connection successful!', 'success');
+                    console.log('Gateway response:', result);
+                } else {
+                    showStatus(`❌ Gateway error: ${result.error || 'Unknown error'}`, 'error');
+                }
+                
+            } catch (error) {
+                showStatus(`❌ Connection failed: ${error.message}`, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function generateAudio() {
+            const text = document.getElementById('textInput').value.trim();
+            const model = document.getElementById('modelSelect').value;
+            const voice = document.getElementById('voiceSelect').value;
+            const speed = parseFloat(document.getElementById('speedSlider').value);
+            const gatewayUrl = document.getElementById('gatewayEndpoint').value;
+            const apiKey = document.getElementById('apiKey').value;
+            
+            if (!text) {
+                showStatus('Please enter some text to synthesize', 'error');
+                return;
+            }
+            
+            if (!gatewayUrl) {
+                showStatus('Please configure Gateway Endpoint URL', 'error');
+                return;
+            }
+            
+            showLoading(true);
+            enableButtons(false);
+            
+            try {
+                const response = await fetch(gatewayUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': apiKey ? `Bearer ${apiKey}` : '',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        input: {
+                            text: text,
+                            model: model,
+                            voice: voice,
+                            speed: speed
+                        }
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                
+                if (result.output && result.output.audio_base64) {
+                    await playAudio(result.output);
+                    showStatus('🎵 Audio generated and playing successfully!', 'success');
+                } else {
+                    throw new Error('No audio data received from server');
+                }
+                
+            } catch (error) {
+                console.error('Error generating audio:', error);
+                showStatus(`❌ Generation failed: ${error.message}`, 'error');
+            } finally {
+                showLoading(false);
+                enableButtons(true);
+            }
+        }
+
+        async function playAudio(audioData) {
+            try {
+                const audioDataUrl = audioData.audio_data_url || `data:audio/mp3;base64,${audioData.audio_base64}`;
+                
+                const audioElement = document.getElementById('audioElement');
+                audioElement.src = audioDataUrl;
+                
+                // Show audio player
+                document.getElementById('audioPlayer').style.display = 'block';
+                
+                // Update audio information
+                document.getElementById('audioInfo').innerHTML = `
+                    <div class="info-item">
+                        <div class="info-label">Model Used</div>
+                        <div class="info-value">${audioData.model_used || 'Unknown'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Duration</div>
+                        <div class="info-value">${audioData.duration?.toFixed(1) || 'N/A'}s</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Voice</div>
+                        <div class="info-value">${audioData.voice_used || 'Default'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Speed</div>
+                        <div class="info-value">${audioData.speed_used || '1.0'}x</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Words</div>
+                        <div class="info-value">${audioData.word_count || 'N/A'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Format</div>
+                        <div class="info-value">${audioData.audio_format || 'MP3'}</div>
+                    </div>
+                `;
+                
+                currentAudioData = audioData;
+                document.getElementById('downloadBtn').disabled = false;
+                
+                // Auto-play
+                try {
+                    await audioElement.play();
+                } catch (playError) {
+                    console.log('Auto-play blocked, user needs to click play');
+                }
+                
+            } catch (error) {
+                console.error('Error playing audio:', error);
+                showStatus('Failed to play audio: ' + error.message, 'error');
+            }
+        }
+
+        function downloadAudio() {
+            if (!currentAudioData) {
+                showStatus('No audio data available for download', 'error');
+                return;
+            }
+            
+            try {
+                const audioDataUrl = currentAudioData.audio_data_url || `data:audio/mp3;base64,${currentAudioData.audio_base64}`;
+                const link = document.createElement('a');
+                link.href = audioDataUrl;
+                link.download = `tts_${currentAudioData.model_used}_${Date.now()}.mp3`;
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                showStatus('📥 Audio file downloaded successfully!', 'success');
+            } catch (error) {
+                showStatus('Download failed: ' + error.message, 'error');
+            }
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        function enableButtons(enabled) {
+            document.getElementById('generateBtn').disabled = !enabled;
+            document.getElementById('testBtn').disabled = !enabled;
+        }
+
+        function showStatus(message, type = 'success') {
+            const statusDiv = document.getElementById('statusMessages');
+            const statusElement = document.createElement('div');
+            statusElement.className = `status ${type}`;
+            statusElement.textContent = message;
+            
+            statusDiv.innerHTML = '';
+            statusDiv.appendChild(statusElement);
+            
+            // Auto-clear after 5 seconds
+            setTimeout(() => {
+                if (statusDiv.contains(statusElement)) {
+                    statusDiv.removeChild(statusElement);
+                }
+            }, 5000);
+        }
+
+        // Load saved configuration
+        window.onload = function() {
+            const savedGateway = localStorage.getItem('tts_gateway_endpoint');
+            const savedApiKey = localStorage.getItem('tts_api_key');
+            
+            if (savedGateway) {
+                document.getElementById('gatewayEndpoint').value = savedGateway;
+            }
+            if (savedApiKey) {
+                document.getElementById('apiKey').value = savedApiKey;
+            }
+        };
+
+        // Save configuration on change
+        document.getElementById('gatewayEndpoint').onchange = function() {
+            localStorage.setItem('tts_gateway_endpoint', this.value);
+        };
+
+        document.getElementById('apiKey').onchange = function() {
+            localStorage.setItem('tts_api_key', this.value);
+        };
+    </script>
+</body>
+</html>
