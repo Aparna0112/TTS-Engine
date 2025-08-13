@@ -2,21 +2,19 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies for audio processing
 RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libsndfile1 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first (for better caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
 COPY . .
 
-# Expose port (even though RunPod doesn't use it)
 EXPOSE 8001
 
-# Use python directly to run the app
 CMD ["python", "-u", "app.py"]
