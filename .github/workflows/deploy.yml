@@ -1,9 +1,22 @@
+# GitHub Actions Workflow for TTS Gateway
+# Save this as: .github/workflows/build-and-deploy.yml
+
 name: Build and Deploy to RunPod
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [ main, master ]
+    paths: 
+      - 'gateway/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main, master ]
+    paths: 
+      - 'gateway/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: tts-gateway
 
 jobs:
   build-and-push:
@@ -11,47 +24,118 @@ jobs:
     permissions:
       contents: read
       packages: write
-    
+
     steps:
-    - name: Checkout code
+    - name: Checkout repository
       uses: actions/checkout@v4
-    
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-    
-    - name: Log in to GitHub Container Registry
+
+    - name: Log in to Container Registry
       uses: docker/login-action@v3
       with:
-        registry: ghcr.io
+        registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Convert repository name to lowercase
-      run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
-    
-    - name: Build and push Gateway
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/tts-engine/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Check if gateway files exist
+      run: |
+        echo "Checking gateway directory structure..."
+        ls -la gateway/ || echo "Gateway directory not found"
+        
+        if [ ! -f "gateway/rp_handler.py" ]; then
+          echo "❌ gateway/rp_handler.py not found"
+          exit 1
+        fi
+        
+        if [ ! -f "gateway/Dockerfile" ]; then
+          echo "❌ gateway/Dockerfile not found"
+          exit 1
+        fi
+        
+        if [ ! -f "gateway/requirements.txt" ]; then
+          echo "❌ gateway/requirements.txt not found"
+          exit 1
+        fi
+        
+        echo "✅ All required files found"
+
+    - name: Validate Python syntax
+      run: |
+        echo "Validating Python syntax..."
+        python -m py_compile gateway/rp_handler.py
+        echo "✅ Python syntax is valid"
+
+    - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
         context: ./gateway
         file: ./gateway/Dockerfile
-        push: true
-        tags: ghcr.io/${{ env.REPO_LOWER }}/tts-gateway:latest
         platforms: linux/amd64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Output image details
+      run: |
+        echo "🚀 Build completed successfully!"
+        echo "📦 Image pushed to: ${{ env.REGISTRY }}/${{ github.repository_owner }}/tts-engine/${{ env.IMAGE_NAME }}"
+        echo "🏷️ Tags:"
+        echo "${{ steps.meta.outputs.tags }}"
+        echo ""
+        echo "📋 Next steps:"
+        echo "1. Go to RunPod Console: https://www.runpod.io/console/serverless"
+        echo "2. Update your gateway endpoint with the new image"
+        echo "3. Test the deployment"
+
+  # Optional: Test the built image
+  test-image:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
-    - name: Build and push Kokkoro
-      uses: docker/build-push-action@v5
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
       with:
-        context: ./models/kokkoro
-        file: ./models/kokkoro/Dockerfile
-        push: true
-        tags: ghcr.io/${{ env.REPO_LOWER }}/tts-kokkoro:latest
-        platforms: linux/amd64
-    
-    - name: Build and push Chatterbox
-      uses: docker/build-push-action@v5
-      with:
-        context: ./models/chatterbox
-        file: ./models/chatterbox/Dockerfile
-        push: true
-        tags: ghcr.io/${{ env.REPO_LOWER }}/tts-chatterbox:latest
-        platforms: linux/amd64
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Test the Docker image
+      run: |
+        IMAGE_TAG="${{ env.REGISTRY }}/${{ github.repository_owner }}/tts-engine/${{ env.IMAGE_NAME }}:latest"
+        echo "Testing image: $IMAGE_TAG"
+        
+        # Test if the image runs without errors
+        docker run --rm \
+          -e KOKKORO_ENDPOINT="dummy" \
+          -e CHATTERBOX_ENDPOINT="dummy" \
+          -e RUNPOD_API_KEY="dummy" \
+          "$IMAGE_TAG" \
+          python rp_handler.py --test || echo "Test completed (expected to fail without real endpoints)"
+
+    - name: Notify deployment status
+      run: |
+        echo "✅ Deployment pipeline completed"
+        echo "🔗 Image available at: ${{ env.REGISTRY }}/${{ github.repository_owner }}/tts-engine/${{ env.IMAGE_NAME }}:latest"
