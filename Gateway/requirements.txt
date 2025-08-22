@@ -1,0 +1,26 @@
+# TTS Gateway Requirements
+# Save this as: requirements.txt
+
+# RunPod SDK - CRITICAL for serverless functionality
+runpod>=1.5.0
+
+# HTTP requests to TTS endpoints
+requests>=2.31.0
+
+# URL handling and security
+urllib3>=1.26.0
+
+# JSON handling (usually included with Python, but ensuring compatibility)
+# json is built-in, no need to install
+
+# Optional: For better error handling and retries
+tenacity>=8.2.0
+
+# Optional: For input validation (if you want to add Pydantic models)
+# pydantic>=2.5.0
+
+# Optional: For async operations (if you plan to add async features)
+# aiohttp>=3.9.0
+
+# Optional: For better logging
+# structlog>=23.1.0
