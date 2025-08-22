@@ -103,9 +103,9 @@ test_image() {
     
     # Test with the --test flag
     docker run --rm \
-        -e KOKKORO_ENDPOINT="${KOKKORO_ENDPOINT:-https://api.runpod.ai/v2/h38h5e6h89x9rv/runsync}" \
-        -e CHATTERBOX_ENDPOINT="${CHATTERBOX_ENDPOINT:-https://api.runpod.ai/v2/q9z7mo11f4vnq4/runsync}" \
-        -e RUNPOD_API_KEY="${RUNPOD_API_KEY:-dummy_key_for_test}" \
+        -e KOKKORO_ENDPOINT="${KOKKORO_ENDPOINT:-https://api.runpod.ai/v2/2bmvfn2g610d9a/runsync}" \
+        -e CHATTERBOX_ENDPOINT="${CHATTERBOX_ENDPOINT:-https://api.runpod.ai/v2/w3m6egp1cicw6n/runsync}" \
+        -e RUNPOD_API_KEY="${RUNPOD_API_KEY:-demokey}" \
         "${full_image_name}" \
         python rp_handler.py --test
     
