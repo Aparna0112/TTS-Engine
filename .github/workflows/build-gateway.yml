@@ -1,22 +1,24 @@
-name: Build Gateway
+name: Build Gateway Image
 on:
   push:
     branches: [main]
-    paths: ['gateway/**']
+  workflow_dispatch:
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - name: Login to GHCR
+    - name: Login to GitHub Container Registry
       uses: docker/login-action@v2
       with:
         registry: ghcr.io
         username: Aparna0112
         password: ${{ secrets.GITHUB_TOKEN }}
-    - name: Build and push
+    - name: Build and push gateway
       uses: docker/build-push-action@v4
       with:
         context: ./gateway
         push: true
-        tags: ghcr.io/aparna0112/tts-engine/tts-gateway:jwt-working
+        tags: |
+          ghcr.io/aparna0112/tts-engine/tts-gateway:latest
+          ghcr.io/aparna0112/tts-engine/tts-gateway:jwt-working
