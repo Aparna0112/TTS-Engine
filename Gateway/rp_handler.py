@@ -48,8 +48,8 @@ class ProductionTTSGateway:
     def __init__(self):
         # Your existing endpoints
         self.endpoints = {
-            TTSEngine.KOKKORO: os.getenv('KOKKORO_ENDPOINT', 'https://api.runpod.ai/v2/h38h5e6h89x9rv/runsync'),
-            TTSEngine.CHATTERBOX: os.getenv('CHATTERBOX_ENDPOINT', 'https://api.runpod.ai/v2/q9z7mo11f4vnq4/runsync')
+            TTSEngine.KOKKORO: os.getenv('KOKKORO_ENDPOINT', ' https://api.runpod.ai/v2/nkimahghirttu5/runsync'),
+            TTSEngine.CHATTERBOX: os.getenv('CHATTERBOX_ENDPOINT', 'https://api.runpod.ai/v2/28fdsvepoffu68/runsync')
         }
         
         # Production configurations
