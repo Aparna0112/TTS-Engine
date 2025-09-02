@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Chatterbox TTS Handler with JWT Authentication
-Based on your existing handler + JWT security
+Fixed version for RunPod compatibility
 """
 
 import runpod
@@ -27,37 +27,38 @@ class ChatterboxHandler:
         print("Initializing Chatterbox TTS handler")
         self.model_name = "chatterbox"
         
-        # JWT Configuration
-        self.jwt_secret = os.getenv('JWT_SECRET')
-        self.jwt_required = os.getenv('REQUIRE_JWT', 'false').lower() == 'true'
+        # JWT Configuration - Updated to match your gateway
+        self.jwt_secret = os.getenv('JWT_SECRET_KEY')  # Changed from JWT_SECRET
+        self.jwt_required = os.getenv('REQUIRE_JWT', 'true').lower() == 'true'  # Default to true
         
         logger.info(f"🔐 Chatterbox JWT - Secret exists: {self.jwt_secret is not None}")
         logger.info(f"🔐 Chatterbox JWT - Required: {self.jwt_required}")
     
-    def verify_jwt_token(self, token: str) -> bool:
-        """Verify JWT token"""
+    def verify_jwt_token(self, token: str) -> Dict:
+        """Verify JWT token and return user info"""
         if not self.jwt_secret:
             logger.error("JWT secret not configured but JWT required")
-            return False
+            return {"valid": False, "error": "JWT secret not configured"}
         
         try:
             payload = jwt.decode(token, self.jwt_secret, algorithms=['HS256'])
             logger.info(f"✅ JWT valid for user: {payload.get('user_id', 'unknown')}")
-            return True
+            return {"valid": True, "user_data": payload}
         except jwt.ExpiredSignatureError:
             logger.warning("JWT token expired")
-            return False
-        except jwt.InvalidTokenError:
-            logger.warning("Invalid JWT token")
-            return False
+            return {"valid": False, "error": "Token expired"}
+        except jwt.InvalidTokenError as e:
+            logger.warning(f"Invalid JWT token: {str(e)}")
+            return {"valid": False, "error": f"Invalid token: {str(e)}"}
         except Exception as e:
             logger.error(f"JWT verification error: {str(e)}")
-            return False
+            return {"valid": False, "error": f"JWT verification error: {str(e)}"}
     
     def generate_audio(self, text: str, voice: str = "default", speed: float = 1.0) -> Dict:
         """Generate audio using Chatterbox TTS (using gTTS with different settings)"""
+        temp_file_path = None
         try:
-            print(f"Chatterbox generating audio for: '{text}' with voice: {voice}, speed: {speed}")
+            logger.info(f"Chatterbox generating audio for: '{text[:50]}...' with voice: {voice}, speed: {speed}")
             
             # Chatterbox uses slightly different settings than Kokkoro
             slow_speech = speed < 0.7  # Different threshold than Kokkoro
@@ -72,7 +73,7 @@ class ChatterboxHandler:
             }
             tld = tld_map.get(voice, 'com.au')
             
-            print(f"Chatterbox using gTTS with slow={slow_speech}, tld={tld}")
+            logger.info(f"Chatterbox using gTTS with slow={slow_speech}, tld={tld}")
             
             # Generate TTS audio
             tts = gTTS(
@@ -99,15 +100,15 @@ class ChatterboxHandler:
             char_count = len(text)
             duration = (word_count * 0.55) / speed  # Chatterbox is slightly faster
             
-            # Save temporary file
+            # Save temporary file (cleaned up later)
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
                 tmp_file.write(audio_data)
-                audio_path = tmp_file.name
+                temp_file_path = tmp_file.name
             
-            print(f"Chatterbox audio generated: {word_count} words, {duration:.2f}s duration")
+            logger.info(f"Chatterbox audio generated: {word_count} words, {duration:.2f}s duration")
             
-            return {
-                "audio_url": audio_path,
+            result = {
+                "audio_url": temp_file_path,
                 "audio_base64": audio_base64,
                 "audio_data_url": audio_data_url,
                 "audio_format": "mp3",
@@ -125,9 +126,18 @@ class ChatterboxHandler:
                 "audio_size_base64": len(audio_base64)
             }
             
+            return result
+            
         except Exception as e:
+            # Clean up temp file on error
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                except:
+                    pass
+            
             error_msg = f"Chatterbox TTS generation failed: {str(e)}"
-            print(f"ERROR: {error_msg}")
+            logger.error(f"ERROR: {error_msg}")
             raise Exception(error_msg)
 
 # Global handler instance
@@ -135,33 +145,41 @@ chatterbox_handler = ChatterboxHandler()
 
 def handler(event):
     """
-    RunPod handler for Chatterbox TTS with optional JWT authentication
+    RunPod handler for Chatterbox TTS with JWT authentication
+    Compatible with your gateway's JWT format
     """
+    temp_files = []
     try:
         input_data = event.get("input", {})
         job_id = event.get("id", "unknown")
         
         logger.info(f"💬 Chatterbox processing job: {job_id}")
+        logger.info(f"📥 Input data keys: {list(input_data.keys())}")
         
         # JWT Authentication (if enabled)
         if chatterbox_handler.jwt_required:
             logger.info(f"🔐 JWT authentication required for Chatterbox")
             
-            auth_token = input_data.get("auth_token")
+            # Check both possible JWT parameter names for compatibility
+            auth_token = input_data.get("jwt_token") or input_data.get("auth_token")
+            
             if not auth_token:
                 logger.warning(f"🚫 No JWT token provided for job {job_id}")
                 return {
                     "error": "Authentication required - JWT token missing",
                     "model": "chatterbox",
-                    "job_id": job_id
+                    "job_id": job_id,
+                    "success": False
                 }
             
-            if not chatterbox_handler.verify_jwt_token(auth_token):
-                logger.warning(f"🚫 Invalid JWT token for job {job_id}")
+            jwt_result = chatterbox_handler.verify_jwt_token(auth_token)
+            if not jwt_result["valid"]:
+                logger.warning(f"🚫 Invalid JWT token for job {job_id}: {jwt_result.get('error')}")
                 return {
-                    "error": "Invalid or expired JWT token",
+                    "error": f"JWT validation failed: {jwt_result.get('error')}",
                     "model": "chatterbox",
-                    "job_id": job_id
+                    "job_id": job_id,
+                    "success": False
                 }
             
             logger.info(f"✅ JWT authentication successful for job {job_id}")
@@ -174,10 +192,11 @@ def handler(event):
             return {
                 "error": "Missing required parameter: text",
                 "model": "chatterbox",
-                "job_id": job_id
+                "job_id": job_id,
+                "success": False
             }
         
-        # Extract parameters
+        # Extract parameters with defaults
         voice = input_data.get("voice", "default")
         speed = float(input_data.get("speed", 1.0))
         
@@ -186,18 +205,41 @@ def handler(event):
         # Generate audio using the handler
         result = chatterbox_handler.generate_audio(text, voice, speed)
         
+        # Store temp file path for cleanup
+        if result.get("audio_url"):
+            temp_files.append(result["audio_url"])
+        
         # Add metadata
         result.update({
             "success": True,
             "job_id": job_id,
             "model": "chatterbox",
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
+            "processing_time": 0.0  # For compatibility
         })
         
         logger.info(f"✅ Chatterbox job {job_id} completed successfully")
+        
+        # Clean up temp files after successful processing
+        for temp_file in temp_files:
+            try:
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
+                    logger.info(f"🗑️ Cleaned up temp file: {temp_file}")
+            except Exception as cleanup_error:
+                logger.warning(f"⚠️ Failed to cleanup {temp_file}: {cleanup_error}")
+        
         return result
         
     except Exception as e:
+        # Clean up temp files on error
+        for temp_file in temp_files:
+            try:
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
+            except:
+                pass
+        
         error_msg = f"Chatterbox handler error: {str(e)}"
         logger.error(f"❌ Job {job_id}: {error_msg}")
         
@@ -205,24 +247,28 @@ def handler(event):
             "error": error_msg,
             "model": "chatterbox",
             "job_id": job_id,
-            "success": False
+            "success": False,
+            "timestamp": datetime.utcnow().isoformat()
         }
 
 def test_handler():
     """Test the Chatterbox handler locally"""
     print("🧪 Testing Chatterbox Handler...")
     
-    # Test without JWT
-    print("\n=== Test WITHOUT JWT ===")
-    result = handler({
-        "id": "test_no_jwt",
-        "input": {
-            "text": "Hello from Chatterbox without JWT",
-            "voice": "casual",
-            "speed": 1.0
-        }
-    })
-    print(f"Result: {result}")
+    # Test without JWT (if JWT is disabled)
+    if not chatterbox_handler.jwt_required:
+        print("\n=== Test WITHOUT JWT ===")
+        result = handler({
+            "id": "test_no_jwt",
+            "input": {
+                "text": "Hello from Chatterbox without JWT",
+                "voice": "casual",
+                "speed": 1.0
+            }
+        })
+        print(f"Result: {result.get('success', False)}")
+        if result.get('audio_base64'):
+            print(f"Audio generated: {len(result['audio_base64'])} base64 chars")
     
     # Test with JWT (if enabled)
     if chatterbox_handler.jwt_required and chatterbox_handler.jwt_secret:
@@ -237,13 +283,15 @@ def test_handler():
         result = handler({
             "id": "test_with_jwt",
             "input": {
-                "auth_token": test_token,
+                "jwt_token": test_token,  # Using jwt_token to match gateway
                 "text": "Hello from Chatterbox with JWT",
                 "voice": "formal",
                 "speed": 1.3
             }
         })
-        print(f"Result: {result}")
+        print(f"Result: {result.get('success', False)}")
+        if result.get('audio_base64'):
+            print(f"Audio generated: {len(result['audio_base64'])} base64 chars")
 
 if __name__ == "__main__":
     import sys
