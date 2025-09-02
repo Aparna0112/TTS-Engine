@@ -1,37 +1,67 @@
-# Use Python 3.10 slim image
-FROM python:3.10-slim
+# gateway/Dockerfile
+FROM python:3.9-slim
 
-# Set working directory
 WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first (for better Docker layer caching)
-COPY requirements.txt /app/
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Copy application code
+COPY . .
 
-# Copy the handler file
-COPY rp_handler.py /app/
+# Expose port
+EXPOSE 8000
 
-# Set environment variables for Python
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
+# Environment variables
+ENV JWT_SECRET_KEY=your-super-secret-key-change-in-production
+ENV KOKKORO_URL=http://kokkoro-service:8001
+ENV CHATTERBOX_URL=http://chatterbox-service:8002
 
-# Remove the problematic health check for RunPod serverless
-# RunPod serverless doesn't work with HTTP health checks
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
-# Create a non-root user for security (optional)
-RUN useradd --create-home --shell /bin/bash app
-RUN chown -R app:app /app
-USER app
+# Run the application
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
-# CRITICAL: Start the RunPod serverless handler
-CMD ["python", "-u", "rp_handler.py"]
+# docker-compose.yml (Updated with authentication)
+version: '3.8'
+
+services:
+  gateway:
+    build: ./gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - JWT_SECRET_KEY=your-super-secret-key-change-in-production-make-it-long-and-random
+      - KOKKORO_URL=http://kokkoro-service:8001
+      - CHATTERBOX_URL=http://chatterbox-service:8002
+    depends_on:
+      - kokkoro-service
+      - chatterbox-service
+    networks:
+      - tts-network
+
+  kokkoro-service:
+    build: ./models/kokkoro
+    ports:
+      - "8001:8001"
+    networks:
+      - tts-network
+
+  chatterbox-service:
+    build: ./models/chatterbox
+    ports:
+      - "8002:8002"
+    networks:
+      - tts-network
+
+networks:
+  tts-network:
+    driver: bridge
