@@ -25,10 +25,16 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Remove the problematic health check for RunPod serverless
-# RunPod serverless doesn't work with HTTP health checks
+# JWT Configuration (these should be overridden in production)
+ENV JWT_SECRET_KEY="your-super-secret-jwt-key-change-this-in-production"
+ENV JWT_ALGORITHM="HS256"
+ENV JWT_EXPIRATION_HOURS="24"
 
-# Create a non-root user for security (optional)
+# TTS Configuration
+ENV REQUEST_TIMEOUT="300"
+ENV MAX_RETRIES="3"
+
+# Create a non-root user for security
 RUN useradd --create-home --shell /bin/bash app
 RUN chown -R app:app /app
 USER app
