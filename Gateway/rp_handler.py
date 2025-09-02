@@ -1,274 +1,214 @@
-#!/usr/bin/env python3
-"""
-FINAL WORKING SOLUTION for JWT Authentication
-This WILL work and block requests without JWT tokens
-Replace your entire rp_handler.py with this code
-"""
-
-import runpod
-import requests
-import os
-import time
+# gateway/main.py
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.security import HTTPBearer, OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from datetime import timedelta
+import httpx
 import logging
-import json
-import jwt
-from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Optional
+import os
 
-# Setup logging
+# Import authentication modules
+from auth import (
+    authenticate_user, 
+    create_access_token, 
+    get_current_active_user, 
+    User, 
+    Token,
+    ACCESS_TOKEN_EXPIRE_MINUTES
+)
+
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def handler(job: Dict[str, Any]) -> Dict[str, Any]:
+app = FastAPI(
+    title="TTS Gateway with JWT Authentication",
+    description="Centralized gateway for multiple TTS engines with JWT authentication",
+    version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure as needed
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Pydantic models
+class TTSRequest(BaseModel):
+    text: str
+    voice: Optional[str] = "default"
+    speed: Optional[float] = 1.0
+    model: str  # kokkoro, chatterbox, etc.
+
+class TTSResponse(BaseModel):
+    audio_url: str
+    message: str
+    model_used: str
+
+class HealthResponse(BaseModel):
+    status: str
+    models: dict
+
+# TTS Engine configurations
+TTS_ENGINES = {
+    "kokkoro": {
+        "url": os.getenv("KOKKORO_URL", "http://kokkoro-service:8001"),
+        "health_endpoint": "/health"
+    },
+    "chatterbox": {
+        "url": os.getenv("CHATTERBOX_URL", "http://chatterbox-service:8002"),
+        "health_endpoint": "/health"
+    }
+}
+
+@app.post("/auth/login", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     """
-    SIMPLIFIED handler that ACTUALLY enforces JWT authentication
-    No complex logic, just direct JWT enforcement
+    Login endpoint to get JWT access token.
+    
+    Use credentials:
+    - username: testuser or demo
+    - password: secret
     """
-    start_time = time.time()
-    job_id = job.get('id', 'unknown')
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/auth/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    """Get current user information."""
+    return current_user
+
+@app.post("/tts", response_model=TTSResponse)
+async def text_to_speech(
+    tts_request: TTSRequest,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Generate speech from text using specified TTS model.
+    Requires valid JWT token.
+    """
+    logger.info(f"TTS request from user {current_user.username} for model {tts_request.model}")
+    
+    # Validate model
+    if tts_request.model not in TTS_ENGINES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model '{tts_request.model}' not supported. Available models: {list(TTS_ENGINES.keys())}"
+        )
+    
+    # Get engine configuration
+    engine = TTS_ENGINES[tts_request.model]
     
     try:
-        logger.info(f"Processing job {job_id}")
-        job_input = job.get('input', {})
-        
-        # Get JWT configuration from environment
-        jwt_secret = os.getenv('JWT_SECRET')
-        jwt_required = os.getenv('REQUIRE_JWT', 'false').lower().strip() == 'true'
-        
-        logger.info(f"JWT Required: {jwt_required}")
-        logger.info(f"JWT Secret exists: {jwt_secret is not None}")
-        
-        # Handle health check
-        if job_input.get('action') == 'health':
-            return {
-                "status": "healthy",
-                "jwt_required": jwt_required,
-                "jwt_secret_exists": jwt_secret is not None,
-                "gateway_version": "FINAL-FIX-1.0",
-                "available_engines": ["kokkoro", "chatterbox"],
-                "job_id": job_id,
-                "processing_time": time.time() - start_time
-            }
-        
-        # JWT AUTHENTICATION - CRITICAL ENFORCEMENT
-        if jwt_required:
-            logger.info("JWT authentication is ENABLED - checking for token...")
-            
-            # Check if auth_token exists in request
-            auth_token = job_input.get('auth_token')
-            logger.info(f"Auth token provided in request: {auth_token is not None}")
-            
-            if not auth_token:
-                logger.warning("BLOCKING REQUEST: No JWT token provided")
-                return {
-                    "success": False,
-                    "error": "AUTHENTICATION REQUIRED: Missing JWT token",
-                    "message": "Include 'auth_token' in your request to access TTS service",
-                    "job_id": job_id,
-                    "processing_time": time.time() - start_time,
-                    "blocked_by": "JWT_AUTHENTICATION"
-                }
-            
-            # Verify JWT token
-            if not jwt_secret:
-                logger.error("JWT_SECRET not configured but JWT is required!")
-                return {
-                    "success": False,
-                    "error": "Server configuration error: JWT secret missing",
-                    "job_id": job_id,
-                    "processing_time": time.time() - start_time
-                }
-            
-            try:
-                payload = jwt.decode(auth_token, jwt_secret, algorithms=['HS256'])
-                logger.info(f"JWT token VERIFIED for user: {payload.get('user_id', 'unknown')}")
-            except jwt.ExpiredSignatureError:
-                logger.warning("BLOCKING REQUEST: JWT token expired")
-                return {
-                    "success": False,
-                    "error": "JWT token has expired",
-                    "job_id": job_id,
-                    "processing_time": time.time() - start_time,
-                    "blocked_by": "JWT_EXPIRED"
-                }
-            except jwt.InvalidTokenError:
-                logger.warning("BLOCKING REQUEST: Invalid JWT token")
-                return {
-                    "success": False,
-                    "error": "Invalid JWT token",
-                    "job_id": job_id,
-                    "processing_time": time.time() - start_time,
-                    "blocked_by": "JWT_INVALID"
-                }
-        else:
-            logger.info("JWT authentication is DISABLED - allowing request")
-        
-        # Validate input
-        text = job_input.get('text')
-        if not text:
-            return {
-                "success": False,
-                "error": "Missing required parameter: text",
-                "job_id": job_id,
-                "processing_time": time.time() - start_time
-            }
-        
-        engine = job_input.get('engine', 'kokkoro')
-        if engine not in ['kokkoro', 'chatterbox']:
-            return {
-                "success": False,
-                "error": f"Invalid engine '{engine}'. Available: kokkoro, chatterbox",
-                "job_id": job_id,
-                "processing_time": time.time() - start_time
-            }
-        
-        # Get TTS endpoint URLs
-        kokkoro_endpoint = os.getenv('KOKKORO_ENDPOINT', 'https://api.runpod.ai/v2/h38h5e6h89x9rv/runsync')
-        chatterbox_endpoint = os.getenv('CHATTERBOX_ENDPOINT', 'https://api.runpod.ai/v2/q9z7mo11f4vnq4/runsync')
-        runpod_api_key = os.getenv('RUNPOD_API_KEY')
-        
-        if not runpod_api_key:
-            # Return test response when no API key (for testing purposes)
-            return {
-                "success": True,
-                "message": "JWT authentication working! (No RUNPOD_API_KEY for actual TTS)",
-                "jwt_authenticated": True,
-                "engine": engine,
-                "text": text,
-                "job_id": job_id,
-                "processing_time": time.time() - start_time
-            }
-        
-        # Call the appropriate TTS endpoint
-        endpoint_url = kokkoro_endpoint if engine == 'kokkoro' else chatterbox_endpoint
-        
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {runpod_api_key}'
-        }
-        
-        tts_payload = {
-            "input": {
-                "text": text,
-                "voice": job_input.get('voice', 'default'),
-                "speed": job_input.get('speed', 1.0)
-            }
-        }
-        
-        logger.info(f"Calling {engine} endpoint: {endpoint_url}")
-        
-        try:
-            response = requests.post(
-                endpoint_url,
-                json=tts_payload,
-                headers=headers,
-                timeout=120
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Forward request to appropriate TTS engine
+            response = await client.post(
+                f"{engine['url']}/generate",
+                json=tts_request.dict()
             )
             
-            if response.status_code == 200:
-                result = response.json()
-                logger.info(f"TTS generation successful for job {job_id}")
-                
-                return {
-                    "success": True,
-                    "job_id": job_id,
-                    "engine": engine,
-                    "text_length": len(text),
-                    "processing_time": time.time() - start_time,
-                    "jwt_authenticated": True,
-                    "result": result,
-                    "endpoint_used": endpoint_url
-                }
-            else:
-                logger.error(f"TTS endpoint error: {response.status_code}")
-                return {
-                    "success": False,
-                    "error": f"TTS service error: {response.status_code}",
-                    "job_id": job_id,
-                    "processing_time": time.time() - start_time
-                }
-                
-        except requests.exceptions.Timeout:
-            logger.error(f"Timeout calling TTS endpoint")
-            return {
-                "success": False,
-                "error": "TTS service timeout",
-                "job_id": job_id,
-                "processing_time": time.time() - start_time
-            }
-        except Exception as e:
-            logger.error(f"Error calling TTS endpoint: {str(e)}")
-            return {
-                "success": False,
-                "error": f"TTS service error: {str(e)}",
-                "job_id": job_id,
-                "processing_time": time.time() - start_time
-            }
+            if response.status_code != 200:
+                logger.error(f"TTS engine {tts_request.model} returned error: {response.status_code}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"TTS engine error: {response.text}"
+                )
             
-    except Exception as e:
-        logger.error(f"Handler error: {str(e)}")
-        return {
-            "success": False,
-            "error": f"Internal error: {str(e)}",
-            "job_id": job_id,
-            "processing_time": time.time() - start_time
-        }
+            result = response.json()
+            
+            return TTSResponse(
+                audio_url=result.get("audio_url", ""),
+                message=f"Speech generated successfully using {tts_request.model}",
+                model_used=tts_request.model
+            )
+            
+    except httpx.TimeoutException:
+        logger.error(f"Timeout when calling TTS engine {tts_request.model}")
+        raise HTTPException(
+            status_code=504,
+            detail=f"TTS engine {tts_request.model} timeout"
+        )
+    except httpx.RequestError as e:
+        logger.error(f"Request error when calling TTS engine {tts_request.model}: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"TTS engine {tts_request.model} unavailable"
+        )
 
-def test_jwt_locally():
-    """Test JWT functionality locally"""
-    print("Testing JWT Authentication...")
+@app.get("/health", response_model=HealthResponse)
+async def health_check():
+    """
+    Public health check endpoint (no authentication required).
+    Check the status of all TTS engines.
+    """
+    models_status = {}
     
-    # Test 1: Health check
-    health = handler({"id": "test", "input": {"action": "health"}})
-    print(f"Health check: {json.dumps(health, indent=2)}")
-    
-    # Test 2: Without JWT (should fail if JWT enabled)
-    no_jwt = handler({
-        "id": "test_no_jwt",
-        "input": {
-            "text": "Test without JWT",
-            "engine": "kokkoro"
-        }
-    })
-    print(f"Without JWT: {json.dumps(no_jwt, indent=2)}")
-    
-    # Test 3: With JWT (should work if JWT enabled)
-    jwt_secret = os.getenv('JWT_SECRET')
-    if jwt_secret:
-        test_token = jwt.encode({
-            "user_id": "test_user",
-            "exp": datetime.utcnow() + timedelta(hours=1)
-        }, jwt_secret, algorithm="HS256")
-        
-        with_jwt = handler({
-            "id": "test_with_jwt",
-            "input": {
-                "auth_token": test_token,
-                "text": "Test with JWT",
-                "engine": "kokkoro"
+    for model_name, engine in TTS_ENGINES.items():
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(f"{engine['url']}{engine['health_endpoint']}")
+                models_status[model_name] = {
+                    "status": "healthy" if response.status_code == 200 else "unhealthy",
+                    "url": engine['url']
+                }
+        except Exception as e:
+            models_status[model_name] = {
+                "status": "unhealthy",
+                "error": str(e),
+                "url": engine['url']
             }
-        })
-        print(f"With JWT: {json.dumps(with_jwt, indent=2)}")
+    
+    overall_status = "healthy" if all(
+        model["status"] == "healthy" for model in models_status.values()
+    ) else "degraded"
+    
+    return HealthResponse(
+        status=overall_status,
+        models=models_status
+    )
+
+@app.get("/models")
+async def list_models(current_user: User = Depends(get_current_active_user)):
+    """
+    List available TTS models.
+    Requires valid JWT token.
+    """
+    return {
+        "available_models": list(TTS_ENGINES.keys()),
+        "total_models": len(TTS_ENGINES)
+    }
+
+@app.get("/")
+async def root():
+    """Root endpoint with API information."""
+    return {
+        "message": "TTS Gateway API with JWT Authentication",
+        "version": "1.0.0",
+        "endpoints": {
+            "auth": "/auth/login",
+            "tts": "/tts",
+            "health": "/health",
+            "models": "/models",
+            "docs": "/docs"
+        },
+        "authentication": "JWT Bearer Token Required (except /health and /docs)"
+    }
 
 if __name__ == "__main__":
-    import sys
-    
-    if "--test" in sys.argv:
-        test_jwt_locally()
-    else:
-        # Log startup configuration
-        jwt_secret = os.getenv('JWT_SECRET')
-        jwt_required = os.getenv('REQUIRE_JWT', 'false').lower() == 'true'
-        
-        logger.info("=" * 50)
-        logger.info("TTS GATEWAY STARTING WITH FINAL FIX")
-        logger.info(f"JWT Secret configured: {jwt_secret is not None}")
-        logger.info(f"JWT Required: {jwt_required}")
-        logger.info(f"REQUIRE_JWT env value: '{os.getenv('REQUIRE_JWT', 'NOT_SET')}'")
-        logger.info("=" * 50)
-        
-        # Start RunPod worker
-        runpod.serverless.start({
-            "handler": handler,
-            "return_aggregate_stream": True
-        })
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
