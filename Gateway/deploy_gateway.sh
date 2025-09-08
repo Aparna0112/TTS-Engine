@@ -103,8 +103,8 @@ test_image() {
     
     # Test with the --test flag
     docker run --rm \
-        -e KOKKORO_ENDPOINT="${KOKKORO_ENDPOINT:-https://api.runpod.ai/v2/h38h5e6h89x9rv/runsync}" \
-        -e CHATTERBOX_ENDPOINT="${CHATTERBOX_ENDPOINT:-https://api.runpod.ai/v2/q9z7mo11f4vnq4/runsync}" \
+        -e KOKKORO_ENDPOINT="${KOKKORO_ENDPOINT:-https://api.runpod.ai/v2/e0lm92f3god7mu/runsync}" \
+        -e CHATTERBOX_ENDPOINT="${CHATTERBOX_ENDPOINT:-https://api.runpod.ai/v2/bc96237ndsvq8t/runsync}" \
         -e RUNPOD_API_KEY="${RUNPOD_API_KEY:-dummy_key_for_test}" \
         "${full_image_name}" \
         python rp_handler.py --test
@@ -154,8 +154,8 @@ show_next_steps() {
     echo "2. Edit your TTS Gateway endpoint or create a new one"
     echo "3. Update the Docker image to: ${full_image_name}:${TAG}"
     echo "4. Set environment variables:"
-    echo "   - KOKKORO_ENDPOINT=${KOKKORO_ENDPOINT:-https://api.runpod.ai/v2/h38h5e6h89x9rv/runsync}"
-    echo "   - CHATTERBOX_ENDPOINT=${CHATTERBOX_ENDPOINT:-https://api.runpod.ai/v2/q9z7mo11f4vnq4/runsync}"
+    echo "   - KOKKORO_ENDPOINT=${KOKKORO_ENDPOINT:-https://api.runpod.ai/v2/e0lm92f3god7mu/runsync}"
+    echo "   - CHATTERBOX_ENDPOINT=${CHATTERBOX_ENDPOINT:-https://api.runpod.ai/v2/bc96237ndsvq8t/runsync}"
     echo "   - RUNPOD_API_KEY=your_runpod_api_key"
     echo "5. Set Min Workers to 1 for testing"
     echo "6. Deploy and test!"
