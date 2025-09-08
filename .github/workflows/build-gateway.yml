@@ -16,23 +16,23 @@ jobs:
       matrix:
         container:
           - name: gateway
-            context: ./gateway
+            context: ./Gateway
             image: tts-gateway
             tags: |
               ghcr.io/aparna0112/tts-gateway:jwt-strict
               ghcr.io/aparna0112/tts-gateway:latest
           - name: kokkoro
-            context: ./kokkoro
+            context: ./models/kokkoro
             image: tts-kokkoro
             tags: |
               ghcr.io/aparna0112/tts-gateway:kokkoro-fixed
               ghcr.io/aparna0112/tts-kokkoro:kokkoro-fixed
           - name: chatterbox
-            context: ./chatterbox
+            context: ./models/chatterbox
             image: tts-chatterbox
             tags: |
-              ghcr.io/aparna0112/tts-engine/tts-chatterbox:latest
-              ghcr.io/aparna0112/tts-chatterbox:latest
+              ghcr.io/aparna0112/tts-gateway:chatterbox-fixed
+              ghcr.io/aparna0112/tts-chatterbox:chatterbox-fixed
 
     steps:
       - name: Checkout repository
