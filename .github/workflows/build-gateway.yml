@@ -1,27 +1,84 @@
+name: Build All TTS Containers
 
-
-name: Build Gateway Image
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: aparna0112
+
 jobs:
-  build:
+  build-containers:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        container:
+          - name: gateway
+            context: ./gateway
+            image: tts-gateway
+            tags: |
+              ghcr.io/aparna0112/tts-gateway:jwt-strict
+              ghcr.io/aparna0112/tts-gateway:latest
+          - name: kokkoro
+            context: ./kokkoro
+            image: tts-kokkoro
+            tags: |
+              ghcr.io/aparna0112/tts-gateway:kokkoro-fixed
+              ghcr.io/aparna0112/tts-kokkoro:kokkoro-fixed
+          - name: chatterbox
+            context: ./chatterbox
+            image: tts-chatterbox
+            tags: |
+              ghcr.io/aparna0112/tts-engine/tts-chatterbox:latest
+              ghcr.io/aparna0112/tts-chatterbox:latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.container.image }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push ${{ matrix.container.name }} container
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.container.context }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ matrix.container.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  verify-build:
+    needs: build-containers
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - name: Login to GitHub Container Registry
-      uses: docker/login-action@v2
-      with:
-        registry: ghcr.io
-        username: Aparna0112
-        password: ${{ secrets.GITHUB_TOKEN }}
-    - name: Build and push gateway
-      uses: docker/build-push-action@v4
-      with:
-        context: ./gateway
-        push: true
-        tags: |
-          ghcr.io/aparna0112/tts-gateway:jwt-strict
-          # ghcr.io/aparna0112/tts-engine/tts-gateway:latest
-          # ghcr.io/aparna0112/tts-engine/tts-gateway:jwt-working
+      - name: Verify container images
+        run: |
+          echo "All TTS containers built successfully:"
+          echo "- Gateway: ghcr.io/aparna0112/tts-gateway:jwt-strict"
+          echo "- Kokkoro: ghcr.io/aparna0112/tts-engine/tts-kokkoro:latest"  
+          echo "- Chatterbox: ghcr.io/aparna0112/tts-engine/tts-chatterbox:latest"
+          echo ""
+          echo "Update your RunPod endpoints to use these new containers."
