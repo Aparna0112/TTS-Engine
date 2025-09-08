@@ -24,8 +24,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration from environment variables
-KOKKORO_ENDPOINT = os.getenv('KOKKORO_ENDPOINT', 'https://api.runpod.ai/v2/qo1xr6seeolans/runsync')
-CHATTERBOX_ENDPOINT = os.getenv('CHATTERBOX_ENDPOINT', 'https://api.runpod.ai/v2/0ngz6axzef521l/runsync')
+KOKKORO_ENDPOINT = os.getenv('KOKKORO_ENDPOINT', https://api.runpod.ai/v2/e0lm92f3god7mu/runsync')
+CHATTERBOX_ENDPOINT = os.getenv('CHATTERBOX_ENDPOINT', 'https://api.runpod.ai/v2/bc96237ndsvq8t/runsync')
 RUNPOD_API_KEY = os.getenv('RUNPOD_API_KEY')
 
 # JWT Configuration - CRITICAL for authentication
