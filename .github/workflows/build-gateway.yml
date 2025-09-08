@@ -1,3 +1,5 @@
+
+
 name: Build Gateway Image
 on:
   push:
@@ -20,5 +22,6 @@ jobs:
         context: ./gateway
         push: true
         tags: |
-          ghcr.io/aparna0112/tts-engine/tts-gateway:latest
-          ghcr.io/aparna0112/tts-engine/tts-gateway:jwt-working
+          ghcr.io/aparna0112/tts-gateway:jwt-strict
+          # ghcr.io/aparna0112/tts-engine/tts-gateway:latest
+          # ghcr.io/aparna0112/tts-engine/tts-gateway:jwt-working
