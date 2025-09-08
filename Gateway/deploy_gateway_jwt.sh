@@ -150,8 +150,8 @@ JWT_ALGORITHM="HS256"
 JWT_EXPIRATION_HOURS="24"
 
 # TTS Engine Endpoints
-KOKKORO_ENDPOINT="https://api.runpod.ai/v2/h38h5e6h89x9rv/runsync"
-CHATTERBOX_ENDPOINT="https://api.runpod.ai/v2/q9z7mo11f4vnq4/runsync"
+KOKKORO_ENDPOINT="https://api.runpod.ai/v2/e0lm92f3god7mu/runsync"
+CHATTERBOX_ENDPOINT="https://api.runpod.ai/v2/bc96237ndsvq8t/runsync"
 
 # Request Settings
 REQUEST_TIMEOUT="300"
