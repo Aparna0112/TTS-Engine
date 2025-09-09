@@ -61,6 +61,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          outputs: type=registry,annotation-index.org.opencontainers.image.visibility=public
   verify-build:
     needs: build-containers
     runs-on: ubuntu-latest
@@ -72,4 +73,5 @@ jobs:
           echo "- Kokkoro: ghcr.io/aparna0112/tts-gateway:kokkoro-v2-fixed"  
           echo "- Chatterbox: ghcr.io/aparna0112/tts-gateway:chatterbox-v2-fixed"
           echo ""
-          echo "Create NEW RunPod endpoints using these V2 containers."
+          echo "These containers are now public and ready for RunPod deployment."
+          echo "Create NEW endpoints with these V2 containers to resolve configuration issues."
