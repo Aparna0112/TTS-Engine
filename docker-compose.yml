@@ -6,7 +6,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - KOKKORO_ENDPOINT=http://kokkoro:8001
+      - KOKKORO_ENDPOINT=https://api.runpod.ai/v2/e0lm92f3god7mu/runsync
       - CHATTERBOX_ENDPOINT=http://chatterbox:8002
     depends_on:
       - kokkoro
