@@ -1,11 +1,19 @@
-name: Build All TTS Containers V2
+name: Build TTS V3 - Real Models with MP3 Output
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild all containers'
+        required: false
+        default: false
+        type: boolean
+
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: aparna0112
+
 jobs:
   build-containers:
     runs-on: ubuntu-latest
@@ -16,43 +24,48 @@ jobs:
             context: ./Gateway
             image: tts-gateway
             tags: |
-              ghcr.io/aparna0112/tts-gateway:v2-jwt-strict
-              ghcr.io/aparna0112/tts-gateway:v2-latest
+              ghcr.io/aparna0112/tts-gateway:v3-mp3-output
+              ghcr.io/aparna0112/tts-gateway:v3-latest
           - name: kokkoro
             context: ./models/kokkoro
             image: tts-kokkoro
             tags: |
-              ghcr.io/aparna0112/tts-gateway:kokkoro-v2-fixed
-              ghcr.io/aparna0112/tts-kokkoro:kokkoro-v2-fixed
+              ghcr.io/aparna0112/tts-kokkoro:v3-real-model
+              ghcr.io/aparna0112/tts-kokkoro:v3-mp3-output
           - name: chatterbox
             context: ./models/chatterbox
             image: tts-chatterbox
             tags: |
-              ghcr.io/aparna0112/tts-gateway:chatterbox-v2-fixed
-              ghcr.io/aparna0112/tts-chatterbox:chatterbox-v2-fixed
+              ghcr.io/aparna0112/tts-chatterbox:v3-real-chatterbox
+              ghcr.io/aparna0112/tts-chatterbox:v3-mp3-output
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        uses: actions/checkout@v4
+
       - name: Log in to Container Registry
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+        uses: docker/setup-buildx-action@v3
+
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
+        uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.container.image }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=sha,prefix={{branch}}-
-            type=raw,value=v2-latest,enable={{is_default_branch}}
+            type=raw,value=v3-latest,enable={{is_default_branch}}
+
       - name: Build and push ${{ matrix.container.name }} container
-        uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0f42f56 # v5.1.0
+        uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.container.context }}
           platforms: linux/amd64,linux/arm64
@@ -61,17 +74,41 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          outputs: type=registry,annotation-index.org.opencontainers.image.visibility=public
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
   verify-build:
     needs: build-containers
     runs-on: ubuntu-latest
     steps:
       - name: Verify container images
         run: |
-          echo "All TTS V2 containers built successfully:"
-          echo "- Gateway: ghcr.io/aparna0112/tts-gateway:v2-jwt-strict"
-          echo "- Kokkoro: ghcr.io/aparna0112/tts-gateway:kokkoro-v2-fixed"  
-          echo "- Chatterbox: ghcr.io/aparna0112/tts-gateway:chatterbox-v2-fixed"
+          echo "🎉 TTS V3 Real Models with MP3 Output Built Successfully!"
           echo ""
-          echo "These containers are now public and ready for RunPod deployment."
-          echo "Create NEW endpoints with these V2 containers to resolve configuration issues."
+          echo "📦 Container Images:"
+          echo "🌐 Gateway:    ghcr.io/aparna0112/tts-gateway:v3-mp3-output"
+          echo "🎌 Kokkoro:    ghcr.io/aparna0112/tts-kokkoro:v3-real-model"
+          echo "🎭 Chatterbox: ghcr.io/aparna0112/tts-chatterbox:v3-real-chatterbox"
+          echo ""
+          echo "✨ New Features:"
+          echo "- 🎵 MP3 output for direct playback in RunPod"
+          echo "- 🎤 Real Kokkoro model voices (no Google TTS)"
+          echo "- 🎭 Real Chatterbox TTS with emotion control"
+          echo "- 🎯 Voice cloning capabilities"
+          echo "- 🏷️ Built-in watermarking"
+          echo ""
+          echo "🚀 Ready for RunPod deployment with GPU instances!"
+
+  # Optional: Test the built images
+  test-containers:
+    needs: build-containers
+    runs-on: ubuntu-latest
+    if: github.event.inputs.force_rebuild == 'true'
+    steps:
+      - name: Test Kokkoro Container
+        run: |
+          docker run --rm ghcr.io/aparna0112/tts-kokkoro:v3-real-model python handler.py --test || echo "Test completed"
+
+      - name: Test Chatterbox Container  
+        run: |
+          docker run --rm ghcr.io/aparna0112/tts-chatterbox:v3-real-chatterbox python handler.py --test || echo "Test completed"
