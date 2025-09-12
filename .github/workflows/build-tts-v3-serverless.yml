@@ -35,6 +35,9 @@ jobs:
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "REPO_OWNER=${REPO_OWNER}" >> $GITHUB_ENV
           echo "IMAGE_NAME=ghcr.io/${REPO_OWNER}/tts-${{ matrix.container.name }}" >> $GITHUB_ENV
+          echo "Debug: Repository owner: ${{ github.repository_owner }}"
+          echo "Debug: Lowercase repo owner: ${REPO_OWNER}"
+          echo "Debug: Image name will be: ghcr.io/${REPO_OWNER}/tts-${{ matrix.container.name }}"
           
       - name: Create basic files for ${{ matrix.container.name }}
         run: |
@@ -99,9 +102,8 @@ jobs:
     steps:
       - name: Success message
         run: |
-          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "All containers built successfully!"
           echo "Images available:"
-          echo "- ghcr.io/${REPO_OWNER}/tts-gateway:v3-serverless"
-          echo "- ghcr.io/${REPO_OWNER}/tts-kokkoro:v3-serverless"
-          echo "- ghcr.io/${REPO_OWNER}/tts-chatterbox:v3-serverless"
+          echo "- ghcr.io/aparna0112/tts-gateway:v3-serverless"
+          echo "- ghcr.io/aparna0112/tts-kokkoro:v3-serverless"
+          echo "- ghcr.io/aparna0112/tts-chatterbox:v3-serverless"
