@@ -6,7 +6,6 @@ on:
   workflow_dispatch:
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: aparna0112
 permissions:
   contents: read
   packages: write
@@ -30,6 +29,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        
+      - name: Set up environment variables
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "REPO_OWNER=${REPO_OWNER}" >> $GITHUB_ENV
+          echo "IMAGE_NAME=ghcr.io/${REPO_OWNER}/tts-${{ matrix.container.name }}" >> $GITHUB_ENV
+          
       - name: Create basic files for ${{ matrix.container.name }}
         run: |
           mkdir -p ${{ matrix.container.context }}
@@ -64,35 +70,38 @@ jobs:
           if __name__ == "__main__":
               runpod.serverless.start({"handler": handler})
           EOF
-      - name: Set lowercase image name
-        run: echo "IMAGE_NAME=ghcr.io/aparna0112/tts-${{ matrix.container.name }}:v3-serverless" >> $GITHUB_ENV
+          
       - name: Log in to Container Registry
         uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ env.REPO_OWNER }}
+          password: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+        
       - name: Build and push ${{ matrix.container.name }}
         uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0f42f56 # v5.1.0
         with:
           context: ${{ matrix.container.context }}
           push: true
           tags: |
-            ghcr.io/aparna0112/tts-${{ matrix.container.name }}:v3-serverless
-            ghcr.io/aparna0112/tts-${{ matrix.container.name }}:latest
+            ${{ env.IMAGE_NAME }}:v3-serverless
+            ${{ env.IMAGE_NAME }}:latest
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          
   verify:
     needs: build-containers
     runs-on: ubuntu-latest
     steps:
       - name: Success message
         run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "All containers built successfully!"
           echo "Images available:"
-          echo "- ghcr.io/${{ github.repository_owner }}/tts-gateway:v3-serverless"
-          echo "- ghcr.io/${{ github.repository_owner }}/tts-kokkoro:v3-serverless"
-          echo "- ghcr.io/${{ github.repository_owner }}/tts-chatterbox:v3-serverless"
+          echo "- ghcr.io/${REPO_OWNER}/tts-gateway:v3-serverless"
+          echo "- ghcr.io/${REPO_OWNER}/tts-kokkoro:v3-serverless"
+          echo "- ghcr.io/${REPO_OWNER}/tts-chatterbox:v3-serverless"
