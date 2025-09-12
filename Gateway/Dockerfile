@@ -1,43 +1,26 @@
-# Use Python 3.10 slim image
 FROM python:3.10-slim
 
-# Set working directory
 WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first (for better Docker layer caching)
-COPY requirements.txt /app/
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Copy application files
+COPY rp_handler.py .
+COPY jwt_utils.py .
+COPY verify_jwt_deployment.py .
 
-# Copy the handler file
-COPY rp_handler.py /app/
-
-# Set environment variables for Python
-ENV PYTHONPATH=/app
+# Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
 
-# JWT Configuration (these should be overridden in production)
-ENV JWT_SECRET_KEY="your-super-secret-jwt-key-change-this-in-production"
-ENV JWT_ALGORITHM="HS256"
-ENV JWT_EXPIRATION_HOURS="24"
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD python -c "import requests; requests.get('http://localhost:8000/health', timeout=5)" || exit 1
 
-# TTS Configuration
-ENV REQUEST_TIMEOUT="300"
-ENV MAX_RETRIES="3"
-
-# Create a non-root user for security
-RUN useradd --create-home --shell /bin/bash app
-RUN chown -R app:app /app
-USER app
-
-# CRITICAL: Start the RunPod serverless handler
-CMD ["python", "-u", "rp_handler.py"]
+CMD ["python", "rp_handler.py"]
