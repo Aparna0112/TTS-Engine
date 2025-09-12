@@ -93,6 +93,6 @@ jobs:
         run: |
           echo "All containers built successfully!"
           echo "Images available:"
-          echo "- ghcr.io/aparna0112/tts-gateway:v3-serverless"
-          echo "- ghcr.io/aparna0112/tts-kokkoro:v3-serverless"
-          echo "- ghcr.io/aparna0112/tts-chatterbox:v3-serverless"
+          echo "- ghcr.io/${{ github.repository_owner }}/tts-gateway:v3-serverless"
+          echo "- ghcr.io/${{ github.repository_owner }}/tts-kokkoro:v3-serverless"
+          echo "- ghcr.io/${{ github.repository_owner }}/tts-chatterbox:v3-serverless"
