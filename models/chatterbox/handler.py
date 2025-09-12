@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """
-Real Chatterbox TTS Handler - Replaces gTTS with actual Chatterbox model
-Compatible with your existing TTS-Engine project structure
+Real Chatterbox TTS Handler with MP3 Output - NO Google TTS
+Direct playable files for RunPod
 File: models/chatterbox/handler.py
 """
 
 import runpod
 import tempfile
 import os
-import base64
-import io
 import jwt
 import logging
+import subprocess
 import torchaudio as ta
 import torch
 from typing import Dict, Optional
@@ -37,10 +36,10 @@ logger = logging.getLogger(__name__)
 
 class ChatterboxHandler:
     def __init__(self):
-        print("Initializing Real Chatterbox TTS handler")
+        print("Initializing Real Chatterbox TTS handler with MP3 output")
         self.model_name = "chatterbox"
         
-        # JWT Configuration - matching your existing system
+        # JWT Configuration
         self.jwt_secret = os.getenv('JWT_SECRET_KEY')
         self.jwt_required = os.getenv('REQUIRE_JWT', 'true').lower() == 'true'
         
@@ -48,57 +47,65 @@ class ChatterboxHandler:
         self.model = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
-        # Voice presets - replacing the old TLD-based system
+        # Real Chatterbox voice presets with detailed configurations
         self.voice_presets = {
-            "default": {
+            "chatterbox_default": {
                 "exaggeration": 0.5, 
                 "cfg_weight": 0.5, 
-                "description": "Balanced natural voice"
+                "description": "Balanced natural Chatterbox voice",
+                "style": "neutral"
             },
-            "casual": {
+            "chatterbox_casual": {
                 "exaggeration": 0.3, 
                 "cfg_weight": 0.4, 
-                "description": "Relaxed conversational tone"
+                "description": "Relaxed conversational Chatterbox",
+                "style": "casual"
             },
-            "formal": {
+            "chatterbox_professional": {
                 "exaggeration": 0.4, 
                 "cfg_weight": 0.7, 
-                "description": "Clear and professional"
+                "description": "Clear professional Chatterbox voice",
+                "style": "formal"
             },
-            "female": {
-                "exaggeration": 0.6, 
-                "cfg_weight": 0.5, 
-                "description": "Warm feminine voice"
-            },
-            "male": {
-                "exaggeration": 0.4, 
-                "cfg_weight": 0.6, 
-                "description": "Strong masculine voice"
-            },
-            "energetic": {
+            "chatterbox_energetic": {
                 "exaggeration": 0.8, 
                 "cfg_weight": 0.3, 
-                "description": "High energy and expressive"
+                "description": "High energy expressive Chatterbox",
+                "style": "energetic"
             },
-            "calm": {
+            "chatterbox_calm": {
                 "exaggeration": 0.2, 
                 "cfg_weight": 0.6, 
-                "description": "Calm and steady"
+                "description": "Calm and steady Chatterbox voice",
+                "style": "calm"
             },
-            "dramatic": {
+            "chatterbox_dramatic": {
                 "exaggeration": 1.0, 
                 "cfg_weight": 0.3, 
-                "description": "Highly expressive and dramatic"
+                "description": "Highly expressive dramatic Chatterbox",
+                "style": "theatrical"
+            },
+            "chatterbox_narrator": {
+                "exaggeration": 0.4, 
+                "cfg_weight": 0.6, 
+                "description": "Story narration Chatterbox voice",
+                "style": "narrator"
+            },
+            "chatterbox_friendly": {
+                "exaggeration": 0.6, 
+                "cfg_weight": 0.4, 
+                "description": "Warm and friendly Chatterbox voice",
+                "style": "friendly"
             }
         }
         
-        logger.info(f"🔐 Chatterbox JWT - Secret exists: {self.jwt_secret is not None}")
-        logger.info(f"🔐 Chatterbox JWT - Required: {self.jwt_required}")
+        logger.info(f"🔐 JWT - Secret exists: {self.jwt_secret is not None}")
+        logger.info(f"🔐 JWT - Required: {self.jwt_required}")
         logger.info(f"🎯 Device: {self.device}")
-        logger.info(f"🎭 Available voice presets: {list(self.voice_presets.keys())}")
+        logger.info(f"🎭 Available Chatterbox voices: {list(self.voice_presets.keys())}")
         
         if not CHATTERBOX_AVAILABLE:
-            logger.error("❌ Real Chatterbox TTS not available - falling back to error mode")
+            logger.error("❌ Real Chatterbox TTS not available")
     
     def load_model(self):
         """Load the real Chatterbox TTS model"""
@@ -115,9 +122,8 @@ class ChatterboxHandler:
                 raise Exception(f"Model loading failed: {str(e)}")
     
     def verify_jwt_token(self, token: str) -> Dict:
-        """Verify JWT token and return user info - compatible with your existing system"""
+        """Verify JWT token"""
         if not self.jwt_secret:
-            logger.error("JWT secret not configured but JWT required")
             return {"valid": False, "error": "JWT secret not configured"}
         
         try:
@@ -125,33 +131,62 @@ class ChatterboxHandler:
             logger.info(f"✅ JWT valid for user: {payload.get('user_id', 'unknown')}")
             return {"valid": True, "user_data": payload}
         except jwt.ExpiredSignatureError:
-            logger.warning("JWT token expired")
             return {"valid": False, "error": "Token expired"}
         except jwt.InvalidTokenError as e:
-            logger.warning(f"Invalid JWT token: {str(e)}")
             return {"valid": False, "error": f"Invalid token: {str(e)}"}
         except Exception as e:
-            logger.error(f"JWT verification error: {str(e)}")
-            return {"valid": False, "error": f"JWT verification error: {str(e)}"}
+            return {"valid": False, "error": f"JWT error: {str(e)}"}
+    
+    def convert_to_mp3(self, wav_path: str, bitrate: str = "192k") -> str:
+        """Convert WAV to MP3 using FFmpeg with high quality"""
+        try:
+            mp3_path = wav_path.replace('.wav', '.mp3')
+            
+            # High-quality MP3 conversion
+            cmd = [
+                'ffmpeg', '-i', wav_path,
+                '-codec:a', 'libmp3lame',
+                '-b:a', bitrate,           # Bitrate (192k for good quality)
+                '-ar', '44100',            # Sample rate  
+                '-ac', '1',                # Mono (or '2' for stereo)
+                '-y',                      # Overwrite output file
+                mp3_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                logger.info(f"✅ Converted to MP3: {mp3_path} (bitrate: {bitrate})")
+                return mp3_path
+            else:
+                logger.error(f"❌ FFmpeg conversion failed: {result.stderr}")
+                return wav_path  # Return original if conversion fails
+                
+        except Exception as e:
+            logger.error(f"❌ MP3 conversion error: {str(e)}")
+            return wav_path  # Return original if conversion fails
     
     def generate_audio(self, 
                       text: str, 
-                      voice: str = "default", 
+                      voice: str = "chatterbox_default", 
                       speed: float = 1.0,
+                      output_format: str = "mp3",
                       audio_prompt_path: Optional[str] = None,
                       exaggeration: Optional[float] = None,
                       cfg_weight: Optional[float] = None) -> Dict:
-        """Generate audio using real Chatterbox TTS model"""
+        """Generate audio using real Chatterbox TTS model with MP3 output"""
         
         # Ensure model is loaded
         self.load_model()
         
-        temp_file_path = None
+        temp_wav_path = None
+        temp_mp3_path = None
+        
         try:
-            logger.info(f"🎤 Real Chatterbox generating: '{text[:50]}...' | voice: {voice} | speed: {speed}")
+            logger.info(f"🎤 Chatterbox generating: '{text[:50]}...' | voice: {voice} | speed: {speed} | format: {output_format}")
             
-            # Get voice preset parameters (maintaining compatibility with your existing voice names)
-            preset = self.voice_presets.get(voice, self.voice_presets["default"])
+            # Get voice preset parameters
+            preset = self.voice_presets.get(voice, self.voice_presets["chatterbox_default"])
             
             # Use custom parameters or defaults from preset
             final_exaggeration = exaggeration if exaggeration is not None else preset["exaggeration"]
@@ -194,67 +229,79 @@ class ChatterboxHandler:
                 wav_stretched = librosa.effects.time_stretch(wav_np, rate=speed)
                 wav = torch.from_numpy(wav_stretched)
             
-            # Save to temporary file
+            # Save to temporary WAV file first
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
-                temp_file_path = tmp_file.name
+                temp_wav_path = tmp_file.name
             
             # Save the audio (ensure proper tensor dimensions)
             if wav.dim() == 1:
                 wav = wav.unsqueeze(0)
-            ta.save(temp_file_path, wav, self.model.sr)
+            ta.save(temp_wav_path, wav, self.model.sr)
             
-            # Read the generated audio file for base64 encoding
-            with open(temp_file_path, 'rb') as f:
-                audio_data = f.read()
+            # Convert to requested format
+            if output_format.lower() == "mp3":
+                temp_mp3_path = self.convert_to_mp3(temp_wav_path)
+                final_audio_path = temp_mp3_path
+                audio_format = "mp3"
+                mime_type = "audio/mpeg"
+            else:
+                final_audio_path = temp_wav_path
+                audio_format = "wav"
+                mime_type = "audio/wav"
             
-            # Convert to base64
-            audio_base64 = base64.b64encode(audio_data).decode('utf-8')
-            
-            # Create data URL (maintaining compatibility with your existing format)
-            audio_data_url = f"data:audio/wav;base64,{audio_base64}"
-            
-            # Calculate duration and metadata
+            # Calculate duration and get file info
             duration = len(wav.squeeze()) / self.model.sr
+            file_size = os.path.getsize(final_audio_path)
             word_count = len(text.split())
             char_count = len(text)
             
-            logger.info(f"✅ Real Chatterbox audio generated: {duration:.2f}s duration, {word_count} words")
+            logger.info(f"✅ Chatterbox audio generated: {duration:.2f}s, {file_size} bytes, {audio_format.upper()}")
             
-            # Return result in format compatible with your existing system
+            # Return result optimized for RunPod playback
             result = {
-                "audio_url": temp_file_path,
-                "audio_base64": audio_base64,
-                "audio_data_url": audio_data_url,
-                "audio_format": "wav",
+                "audio_url": final_audio_path,  # Direct file path for RunPod access
+                "playable_url": final_audio_path,  # Same as audio_url for clarity
+                "audio_format": audio_format,
+                "mime_type": mime_type,
                 "duration": round(duration, 2),
                 "sample_rate": self.model.sr,
                 "model": "chatterbox",
-                "model_version": "resemble-ai-real-1.0",  # Updated to indicate real model
+                "model_version": "resemble-ai-real-1.0",
                 "voice_used": voice,
                 "voice_description": preset["description"],
+                "voice_style": preset["style"],
                 "speed_used": speed,
                 "exaggeration_used": final_exaggeration,
                 "cfg_weight_used": final_cfg_weight,
                 "text_length": char_count,
                 "word_count": word_count,
-                "audio_size_bytes": len(audio_data),
-                "audio_size_base64": len(audio_base64),
+                "audio_size_bytes": file_size,
                 "device_used": self.device,
                 "has_watermark": True,  # Real Chatterbox includes Perth watermarker
-                "available_voices": list(self.voice_presets.keys()),
+                "is_real_chatterbox": True,
                 "audio_prompt_used": audio_prompt_path is not None,
-                "is_real_chatterbox": True  # Flag to indicate this is the real model
+                "output_format": audio_format,
+                "bitrate": "192k" if audio_format == "mp3" else None
             }
+            
+            # Clean up intermediate files (keep final output)
+            if temp_wav_path and temp_mp3_path and temp_wav_path != final_audio_path:
+                try:
+                    os.unlink(temp_wav_path)  # Remove intermediate WAV if MP3 was created
+                    logger.info(f"🗑️ Cleaned up intermediate WAV file")
+                except:
+                    pass
             
             return result
             
         except Exception as e:
-            # Clean up temp file on error
-            if temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.unlink(temp_file_path)
-                except:
-                    pass
+            # Clean up temp files on error
+            for path in [temp_wav_path, temp_mp3_path]:
+                if path and os.path.exists(path):
+                    try:
+                        os.unlink(path)
+                    except:
+                        pass
             
             error_msg = f"Real Chatterbox TTS generation failed: {str(e)}"
             logger.error(f"❌ ERROR: {error_msg}")
@@ -264,28 +311,21 @@ class ChatterboxHandler:
 chatterbox_handler = ChatterboxHandler()
 
 def handler(event):
-    """
-    RunPod handler for Real Chatterbox TTS
-    Compatible with your existing TTS-Engine system
-    """
+    """RunPod handler for Real Chatterbox TTS with MP3 output"""
     temp_files = []
     try:
         input_data = event.get("input", {})
         job_id = event.get("id", "unknown")
         
-        logger.info(f"🎭 Real Chatterbox processing job: {job_id}")
+        logger.info(f"🎭 Chatterbox processing job: {job_id}")
         logger.info(f"📥 Input data keys: {list(input_data.keys())}")
         
-        # JWT Authentication (matching your existing system)
+        # JWT Authentication
         if chatterbox_handler.jwt_required:
-            logger.info(f"🔐 JWT authentication required")
-            
             auth_token = input_data.get("jwt_token") or input_data.get("auth_token")
-            
             if not auth_token:
-                logger.warning(f"🚫 No JWT token provided for job {job_id}")
                 return {
-                    "error": "Authentication required - JWT token missing",
+                    "error": "JWT token required",
                     "model": "chatterbox",
                     "job_id": job_id,
                     "success": False
@@ -293,66 +333,67 @@ def handler(event):
             
             jwt_result = chatterbox_handler.verify_jwt_token(auth_token)
             if not jwt_result["valid"]:
-                logger.warning(f"🚫 Invalid JWT token for job {job_id}: {jwt_result.get('error')}")
                 return {
-                    "error": f"JWT validation failed: {jwt_result.get('error')}",
+                    "error": f"JWT failed: {jwt_result.get('error')}",
                     "model": "chatterbox",
                     "job_id": job_id,
                     "success": False
                 }
-            
-            logger.info(f"✅ JWT authentication successful for job {job_id}")
         
-        # Validate required parameters
+        # Validate input
         text = input_data.get("text")
         if not text:
             return {
-                "error": "Missing required parameter: text",
+                "error": "Missing text parameter",
                 "model": "chatterbox",
                 "job_id": job_id,
                 "success": False,
                 "available_voices": list(chatterbox_handler.voice_presets.keys())
             }
         
-        # Extract parameters (maintaining compatibility with your existing API)
-        voice = input_data.get("voice", "default")
+        # Extract parameters
+        voice = input_data.get("voice", "chatterbox_default")
         speed = float(input_data.get("speed", 1.0))
-        audio_prompt_path = input_data.get("audio_prompt_path")  # New feature: voice cloning
-        exaggeration = input_data.get("exaggeration")  # New feature: emotion control
-        cfg_weight = input_data.get("cfg_weight")  # New feature: fine-tuning
+        output_format = input_data.get("format", "mp3")  # Default to MP3
+        audio_prompt_path = input_data.get("audio_prompt_path")  # Voice cloning
+        exaggeration = input_data.get("exaggeration")  # Custom emotion
+        cfg_weight = input_data.get("cfg_weight")  # Custom fine-tuning
         
-        # Validate voice (maintaining compatibility)
+        # Validate voice
         if voice not in chatterbox_handler.voice_presets:
             available_voices = list(chatterbox_handler.voice_presets.keys())
             return {
-                "error": f"Invalid voice '{voice}'. Available voices: {available_voices}",
+                "error": f"Invalid voice '{voice}'. Available: {available_voices}",
                 "available_voices": available_voices,
                 "model": "chatterbox",
                 "job_id": job_id,
                 "success": False
             }
         
-        logger.info(f"🎤 Processing: {len(text)} chars, voice: {voice}, speed: {speed}")
+        logger.info(f"🎤 Processing: voice={voice}, speed={speed}, format={output_format}")
         if exaggeration is not None:
             logger.info(f"🎛️ Custom exaggeration: {exaggeration}")
         if cfg_weight is not None:
             logger.info(f"🎛️ Custom cfg_weight: {cfg_weight}")
+        if audio_prompt_path:
+            logger.info(f"🎵 Voice cloning: {audio_prompt_path}")
         
-        # Generate audio using the real Chatterbox handler
+        # Generate audio
         result = chatterbox_handler.generate_audio(
             text=text,
             voice=voice,
             speed=speed,
+            output_format=output_format,
             audio_prompt_path=audio_prompt_path,
             exaggeration=exaggeration,
             cfg_weight=cfg_weight
         )
         
-        # Store temp file path for cleanup
+        # Store temp file for cleanup (but don't delete immediately for RunPod access)
         if result.get("audio_url"):
             temp_files.append(result["audio_url"])
         
-        # Add metadata (maintaining compatibility with your existing system)
+        # Add metadata
         result.update({
             "success": True,
             "job_id": job_id,
@@ -360,22 +401,16 @@ def handler(event):
             "timestamp": datetime.utcnow().isoformat()
         })
         
-        logger.info(f"✅ Real Chatterbox job {job_id} completed successfully")
-        logger.info(f"📊 Duration: {result.get('duration')}s, Size: {result.get('audio_size_bytes')} bytes")
+        logger.info(f"✅ Chatterbox job {job_id} completed: {result.get('duration')}s {result.get('output_format').upper()}")
+        logger.info(f"📊 File: {result.get('playable_url')} ({result.get('audio_size_bytes')} bytes)")
         
-        # Clean up temp files after successful processing
-        for temp_file in temp_files:
-            try:
-                if os.path.exists(temp_file):
-                    os.unlink(temp_file)
-                    logger.info(f"🗑️ Cleaned up temp file: {temp_file}")
-            except Exception as cleanup_error:
-                logger.warning(f"⚠️ Failed to cleanup {temp_file}: {cleanup_error}")
+        # Note: Don't clean up files immediately - RunPod needs to access them
+        # Files will be cleaned up when container terminates
         
         return result
         
     except Exception as e:
-        # Clean up temp files on error
+        # Clean up temp files on error only
         for temp_file in temp_files:
             try:
                 if os.path.exists(temp_file):
@@ -396,43 +431,69 @@ def handler(event):
         }
 
 def test_handler():
-    """Test the Real Chatterbox handler locally"""
-    print("🧪 Testing Real Chatterbox Handler...")
+    """Test the Real Chatterbox handler with MP3 output"""
+    print("🧪 Testing Real Chatterbox Handler with MP3 output...")
     
     if not CHATTERBOX_AVAILABLE:
         print("❌ Chatterbox TTS not available. Install with: pip install chatterbox-tts")
         return
     
-    # Test available voices
     print(f"🎭 Available voices: {list(chatterbox_handler.voice_presets.keys())}")
     
-    # Test different voices with your existing voice names
+    # Test different voices and formats
     test_cases = [
-        {"voice": "default", "text": "Hello, this is the real Chatterbox TTS model replacing Google TTS."},
-        {"voice": "casual", "text": "Hey there! This sounds much more natural than the old system, right?"},
-        {"voice": "formal", "text": "Good day. I am pleased to demonstrate the professional voice preset."},
-        {"voice": "energetic", "text": "Wow! This is so much better! The real Chatterbox model is amazing!"}
+        {
+            "voice": "chatterbox_default", 
+            "text": "Hello! This is the default Chatterbox voice in MP3 format.",
+            "format": "mp3"
+        },
+        {
+            "voice": "chatterbox_energetic", 
+            "text": "Wow! This is so exciting! High energy Chatterbox voice!",
+            "format": "mp3",
+            "exaggeration": 0.9
+        },
+        {
+            "voice": "chatterbox_calm", 
+            "text": "Take a deep breath. This is the calm Chatterbox voice for relaxation.",
+            "format": "wav"
+        },
+        {
+            "voice": "chatterbox_dramatic", 
+            "text": "In a world of artificial intelligence, one voice stands supreme!",
+            "format": "mp3",
+            "exaggeration": 1.0
+        }
     ]
     
     for i, test_case in enumerate(test_cases):
-        print(f"\n=== Test {i+1}: {test_case['voice']} voice ===")
+        print(f"\n=== Test {i+1}: {test_case['voice']} ({test_case['format'].upper()}) ===")
+        
+        input_data = {
+            "text": test_case["text"],
+            "voice": test_case["voice"],
+            "speed": 1.0,
+            "format": test_case["format"]
+        }
+        
+        if "exaggeration" in test_case:
+            input_data["exaggeration"] = test_case["exaggeration"]
         
         result = handler({
             "id": f"test_{i+1}",
-            "input": {
-                "text": test_case["text"],
-                "voice": test_case["voice"],
-                "speed": 1.0
-            }
+            "input": input_data
         })
         
         print(f"Success: {result.get('success', False)}")
         if result.get('success'):
             print(f"Duration: {result.get('duration')}s")
-            print(f"Voice used: {result.get('voice_used')}")
-            print(f"Description: {result.get('voice_description')}")
-            print(f"Is real Chatterbox: {result.get('is_real_chatterbox')}")
-            print(f"Audio size: {result.get('audio_size_bytes')} bytes")
+            print(f"Format: {result.get('output_format')}")
+            print(f"File: {result.get('playable_url')}")
+            print(f"Voice: {result.get('voice_description')}")
+            print(f"Style: {result.get('voice_style')}")
+            print(f"Size: {result.get('audio_size_bytes')} bytes")
+            if result.get('exaggeration_used'):
+                print(f"Exaggeration: {result.get('exaggeration_used')}")
         else:
             print(f"Error: {result.get('error')}")
 
@@ -446,6 +507,7 @@ if __name__ == "__main__":
         logger.info(f"🔧 JWT Authentication: {'Enabled' if chatterbox_handler.jwt_required else 'Disabled'}")
         logger.info(f"🎭 Voice Presets: {len(chatterbox_handler.voice_presets)}")
         logger.info(f"🎯 Device: {chatterbox_handler.device}")
+        logger.info(f"🎵 Output: MP3/WAV files for direct playback")
         logger.info(f"🤖 Real Chatterbox Available: {CHATTERBOX_AVAILABLE}")
         
         # Start RunPod serverless worker
