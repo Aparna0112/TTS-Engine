@@ -1,22 +1,21 @@
-
-# Core RunPod and auth (same as your existing system)
+# Core dependencies
 runpod==1.7.6
 PyJWT==2.8.0
 
-# Real Chatterbox TTS model
+# Real Chatterbox TTS
 chatterbox-tts
 
-# PyTorch and audio processing
+# Audio processing
 torch>=1.13.0
 torchaudio>=0.13.0
 librosa>=0.10.0
 numpy>=1.21.0
 soundfile>=0.12.0
 
-# Web framework (if needed for your app.py)
+# Web framework
 fastapi>=0.68.0
 uvicorn[standard]>=0.15.0
 python-multipart>=0.0.5
 
-# Additional utilities
+# Utilities
 requests>=2.25.0
