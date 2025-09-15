@@ -1,37 +1,35 @@
-FROM runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04
+FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies including FFmpeg (same as your repo needs)
+# Add labels to link container to repository
+LABEL org.opencontainers.image.source=https://github.com/aparna0112/TTS-Engine
+LABEL org.opencontainers.image.description="TTS chatterbox serverless container with offline TTS"
+LABEL org.opencontainers.image.licenses=MIT
+
+# Install system dependencies for TTS
 RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    libsndfile1 \
-    libsndfile1-dev \
-    git \
+    curl \
+    espeak \
+    espeak-data \
+    libespeak1 \
+    libespeak-dev \
+    portaudio19-dev \
+    python3-dev \
+    gcc \
+    alsa-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
+# Copy requirements and install Python dependencies
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the serverless handler
-COPY handler.py .
-
-# Create directories for voice storage (serverless compatible)
-RUN mkdir -p /tmp/voices /tmp/audio
-
-# Pre-download the Chatterbox model (same as your repo approach)
-RUN python -c "from chatterbox.src.chatterbox.tts import ChatterboxTTS; ChatterboxTTS.from_pretrained(device='cpu')" || \
-    python -c "from chatterbox.tts import ChatterboxTTS; ChatterboxTTS.from_pretrained(device='cpu')" || \
-    echo "Model will download at runtime"
-
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV CUDA_VISIBLE_DEVICES=0
+# Copy application code
+COPY handler.py ./
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD python -c "import torch; print('GPU:', torch.cuda.is_available())" && \
-      ffmpeg -version > /dev/null
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "print('healthy')" || exit 1
 
+# Run the handler
 CMD ["python", "handler.py"]
